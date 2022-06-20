@@ -1,0 +1,20 @@
+{
+  "mqtt": {
+    "broker": "192.168.1.186",
+    "port": 1883
+  },
+  "device": {
+    "name": "solar-power-meter",
+    "model": "MKR ZERO",
+    "manufacturer": "Arduino",
+    "version": "0.1.0"
+  },
+  "relays": [
+    {
+      "name": "Relay 1"
+    },
+    {
+      "name": "Relay 2"
+    }
+  ]
+}
