@@ -3,29 +3,40 @@
 #include <SD.h>
 #include <Ethernet.h>
 #include <ArduinoHA.h>
+#if USE_INA3221
 #include <Wire.h>
 #include <Beastdevices_INA3221.h>
+#endif
 
 #define SERIAL_SPEED 115200 // serial baud rate
 #define PRINT_DEC_POINTS 3  // decimal points to print
 
-const int chipSelect = SDCARD_SS_PIN;
+#if SD_IN_MKRZERO
+const unsigned int chipSelect = SDCARD_SS_PIN;
+#else
+const unsigned int chipSelect = 4;
+#endif
+
+#if USE_INA3221
 const unsigned long INA3221_PUBLISH_INTERVAL = 5000UL;
 unsigned long ina3221PreviousMillis = 0UL;
+#endif
 
 const unsigned int RELAY_1_PIN = 1;
 const unsigned int RELAY_2_PIN = 2;
 
+#if USE_INA3221
 // Set I2C address to 0x41 (A0 pin -> VCC)
 Beastdevices_INA3221 ina3221(INA3221_ADDR41_VCC);
+#endif
 
 #define BROKER_ADDR IPAddress(192, 168, 1, 186)
 // IPAddress brokerAddr;
 
-byte mac[] = {0x00, 0x10, 0xFA, 0x6E, 0x38, 0x4A};
-unsigned long lastReadAt = millis();
-unsigned long lastAvailabilityToggleAt = millis();
-bool lastInputState = false;
+byte mac[] = {0x00, 0x10, 0xFA, 0x6E, 0x38, 0x4C};
+// unsigned long lastReadAt = millis();
+// unsigned long lastAvailabilityToggleAt = millis();
+// bool lastInputState = false;
 
 EthernetClient client;
 HADevice haDevice(mac, sizeof(mac));
@@ -35,12 +46,14 @@ HAMqtt mqtt(client, haDevice);
 // Set initial state of off (false)
 HASwitch relay_1("relay_1", false);
 HASwitch relay_2("relay_2", false);
+#if USE_INA3221
 HASensor ina3221_channel_1_current("ina3221_channel_1_current");
 HASensor ina3221_channel_1_voltage("ina3221_channel_1_voltage");
 HASensor ina3221_channel_2_current("ina3221_channel_2_current");
 HASensor ina3221_channel_2_voltage("ina3221_channel_2_voltage");
 HASensor ina3221_channel_3_current("ina3221_channel_3_current");
 HASensor ina3221_channel_3_voltage("ina3221_channel_3_voltage");
+#endif
 
 void onBeforeSwitchStateChanged(bool state, HASwitch *s)
 {
@@ -91,23 +104,24 @@ void setup()
   pinMode(RELAY_2_PIN, OUTPUT);
   // relay_2_lastInputState = digitalRead(RELAY_2_PIN);
 
+#if USE_INA3221
   ina3221.begin();
   ina3221.reset();
 
   // Set shunt resistors to 10 mOhm for all channels
   ina3221.setShuntRes(10, 10, 10);
+#endif
 
-  Serial.print("Initializing SD card...");
+  Serial.println("\nInitializing SD card...");
 
   // see if the card is present and can be initialized:
   if (!SD.begin(chipSelect))
   {
-    Serial.println("Card failed, or not present");
+    Serial.println("Card initialization failed, or not present");
     // don't do anything more:
-    while (1)
-      ;
+    while (1);
   }
-  Serial.println("card initialized.");
+  Serial.println("Card is present and initialized.");
 
   read_config();
 
@@ -136,19 +150,22 @@ void setup()
   JsonArray relays = doc["relays"].as<JsonArray>();
 
   // Configure relay_1 specifics
-  relay_1.setName(relays.getElement(0));
+  JsonObject relay = relays.getElement(0);
+  relay_1.setName(relay["name"]);
   relay_1.setRetain(true);
   // handle switch state
   relay_1.onBeforeStateChanged(onBeforeSwitchStateChanged);
   relay_1.onStateChanged(relay1onSwitchStateChanged);
 
   // Configure relay_2 specifics
-  relay_2.setName(relays.getElement(1));
+  relay = relays.getElement(1);
+  relay_2.setName(relay["name"]);
   relay_2.setRetain(true);
   // handle switch state
   relay_2.onBeforeStateChanged(onBeforeSwitchStateChanged);
   relay_2.onStateChanged(relay2onSwitchStateChanged);
 
+#if USE_INA3221
   // Configure ina3221_channel_1 specifics
   ina3221_channel_1_current.setName("Channel 1 Current");
   ina3221_channel_1_current.setUnitOfMeasurement("A");
@@ -178,23 +195,33 @@ void setup()
   ina3221_channel_3_voltage.setUnitOfMeasurement("V");
   ina3221_channel_3_voltage.setDeviceClass("voltage");
   ina3221_channel_3_voltage.setIcon("mdi:home-battery-outline");
+#endif
 
   // you don't need to verify return status
   Ethernet.begin(mac);
 
+  // print your local IP address:
+  Serial.println(Ethernet.localIP());
+
   // String ipAddStr = String(doc["mqtt"]["broker"]);
   // mqtt.begin(brokerAddr.fromString(String(doc["mqtt"]["broker"])));
   mqtt.begin(BROKER_ADDR);
-
-  lastReadAt = millis();
-  lastAvailabilityToggleAt = millis();
 }
 
 void loop()
 {
+  String output;
+  serializeJson(doc, output);
+  Serial.println(output);
+  // Serial.println(relay_1.getName());
+  // Serial.println(relay_2.getName());
+  Serial.println(Ethernet.localIP());
+  delay(2000);
+
   Ethernet.maintain();
   mqtt.loop();
 
+#if USE_INA3221
   unsigned long now = millis();
 
   // publish ina3221 values
@@ -208,4 +235,5 @@ void loop()
     ina3221_channel_3_current.setValue(ina3221.getCurrent(INA3221_CH3));
     ina3221_channel_3_voltage.setValue(ina3221.getVoltage(INA3221_CH3));
   }
+#endif
 }
