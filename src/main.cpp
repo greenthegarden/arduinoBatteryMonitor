@@ -10,6 +10,9 @@
 #if USE_ACS712
 #include <ACS712.h>
 #endif
+#if USE_METRIFUL
+#include <Metriful_sensor.h>
+#endif
 
 #define SERIAL_SPEED 115200 // serial baud rate
 #define PRINT_DEC_POINTS 3  // decimal points to print
@@ -59,6 +62,32 @@ void relay2onSwitchStateChanged(bool state, HASwitch *s)
 {
   digitalWrite(RELAY_2_PIN, (state ? HIGH : LOW));
 }
+
+#if USE_METRIFUL
+// Configure INA3221 Sensor
+const unsigned long METRIFUL_PUBLISH_INTERVAL = 5000UL;
+unsigned long metrifulPreviousMillis = 0UL;
+
+// How often to read and report the data (every 3, 100 or 300 seconds)
+uint8_t cycle_period = CYCLE_PERIOD_100_S;
+
+// Structs for data
+AirData_t airData = {0};
+AirQualityData_t airQualityData = {0};
+LightData_t lightData = {0};
+ParticleData_t particleData = {0};
+SoundData_t soundData = {0};
+
+HASensor metriful_temperature("metriful_temperature");
+HASensor metriful_pressure("metriful_pressure");
+HASensor metriful_humidity("metriful_humidity");
+HASensor metriful_illuminance("metriful_illuminance");
+HASensor metriful_soundLevel("metriful_current");
+HASensor metriful_peakAmplitude("metriful_peakAmplitude");
+HASensor metriful_AQI("metriful_AQI");
+HASensor metriful_AQ_assessment("metriful_AQ_assessment");
+HASensor metriful_particulates("metriful_particulates");
+#endif
 
 #if USE_INA3221
 // Configure INA3221 Sensor
@@ -122,6 +151,18 @@ void setup()
   // relay_1_lastInputState = digitalRead(RELAY_1_PIN);
   pinMode(RELAY_2_PIN, OUTPUT);
   // relay_2_lastInputState = digitalRead(RELAY_2_PIN);
+
+#if USE_METRIFUL
+  // Initialize the host's pins, set up the serial port and reset:
+  SensorHardwareSetup(I2C_ADDRESS);
+
+  // Apply settings to the MS430 and enter cycle mode
+  uint8_t particleSensorCode = PARTICLE_SENSOR;
+  TransmitI2C(I2C_ADDRESS, PARTICLE_SENSOR_SELECT_REG, &particleSensorCode, 1);
+  TransmitI2C(I2C_ADDRESS, CYCLE_TIME_PERIOD_REG, &cycle_period, 1);
+  ready_assertion_event = false;
+  TransmitI2C(I2C_ADDRESS, CYCLE_MODE_CMD, 0, 0);
+#endif
 
 #if USE_INA3221
   ina3221.begin();
@@ -188,9 +229,45 @@ void setup()
   relay_2.onBeforeStateChanged(onBeforeSwitchStateChanged);
   relay_2.onStateChanged(relay2onSwitchStateChanged);
 
+#if USE_METRIFUL
+  metriful_temperature.setName("Temperature");
+  metriful_temperature.setUnitOfMeasurement("°C");
+  metriful_temperature.setDeviceClass("temperature");
+  metriful_temperature.setIcon("mdi:thermometer");
+  metriful_pressure.setName("Pressure");
+  metriful_pressure.setUnitOfMeasurement("Pa");
+  metriful_pressure.setDeviceClass("pressure");
+  metriful_pressure.setIcon("mdi:weather-cloudy");
+  metriful_humidity.setName("Humidity");
+  metriful_humidity.setUnitOfMeasurement("%");
+  metriful_humidity.setDeviceClass("pressure");
+  metriful_humidity.setIcon("mdi:water-percent");
+  metriful_illuminance.setName("Illuminance");
+  metriful_illuminance.setUnitOfMeasurement("lx");
+  metriful_illuminance.setDeviceClass("illuminance");
+  metriful_illuminance.setIcon("mdi:white-balance-sunny");
+  metriful_soundLevel.setName("Sound level");
+  metriful_soundLevel.setUnitOfMeasurement("dBA");
+  metriful_soundLevel.setDeviceClass("pressure");
+  metriful_soundLevel.setIcon("mdi:microphone");
+  metriful_peakAmplitude.setName("Sound peak");
+  metriful_peakAmplitude.setUnitOfMeasurement("mPa");
+  metriful_peakAmplitude.setDeviceClass("pressure");
+  metriful_peakAmplitude.setIcon("mdi:waveform");
+  metriful_AQI.setName("Air Quality Index");
+  metriful_AQI.setDeviceClass("aqi");
+  metriful_AQI.setIcon("mdi:thought-bubble-outline");
+  metriful_AQ_assessment.setName("Air quality assessment");
+  metriful_AQ_assessment.setIcon("mdi:flower-tulip");
+  metriful_particulates.setName("Particle concentration");
+  metriful_particulates.setUnitOfMeasurement("µg/m³");
+  metriful_particulates.setDeviceClass("pm25");
+  metriful_particulates.setIcon("mdi:chart-bubble");
+#endif
+
 #if USE_INA3221
-  // Configure ina3221_channel_1 specifics
-  ina3221_channel_1_current.setName("Channel 1 Current");
+      // Configure ina3221_channel_1 specifics
+      ina3221_channel_1_current.setName("Channel 1 Current");
   ina3221_channel_1_current.setUnitOfMeasurement("A");
   ina3221_channel_1_current.setDeviceClass("current");
   ina3221_channel_1_current.setIcon("mdi:current-dc");
@@ -244,6 +321,23 @@ void loop()
   mqtt.loop();
 
   unsigned long now = millis();
+
+#if USE_METRIFUL
+  // publish metriful values
+  if (now - metrifulPreviousMillis >= METRIFUL_PUBLISH_INTERVAL)
+  {
+    metrifulPreviousMillis = now;
+    // Read data from the MS430 into the data structs.
+    ReceiveI2C(I2C_ADDRESS, AIR_DATA_READ, (uint8_t *)&airData, AIR_DATA_BYTES);
+    ReceiveI2C(I2C_ADDRESS, AIR_QUALITY_DATA_READ, (uint8_t *)&airQualityData, AIR_QUALITY_DATA_BYTES);
+    ReceiveI2C(I2C_ADDRESS, LIGHT_DATA_READ, (uint8_t *)&lightData, LIGHT_DATA_BYTES);
+    ReceiveI2C(I2C_ADDRESS, SOUND_DATA_READ, (uint8_t *)&soundData, SOUND_DATA_BYTES);
+    ReceiveI2C(I2C_ADDRESS, PARTICLE_DATA_READ, (uint8_t *)&particleData, PARTICLE_DATA_BYTES);
+
+    metriful_pressure.setValue((uint32_t)airData.P_Pa);
+    metriful_humidity.setValue((uint32_t)airData.H_pc_int);
+  }
+#endif
 
 #if USE_INA3221
 
