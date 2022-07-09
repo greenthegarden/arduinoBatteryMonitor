@@ -114,7 +114,7 @@ unsigned long acs712PreviousMillis = 0UL;
 // ACS712 5A  uses 185 mV per A
 // ACS712 20A uses 100 mV per A
 // ACS712 30A uses  66 mV per A
-ACS712 ACS(A0, 5.0, 1023, 100);
+ACS712 ACS(A1, 5.0, 1023, 66);
 
 HASensor acs712_current("acs712_current");
 #endif
@@ -298,7 +298,7 @@ void setup()
 #endif
 
 #if USE_ACS712
-  acs712_current.setName("ACS712 Current");
+  acs712_current.setName("Solar Current");
   acs712_current.setUnitOfMeasurement("A");
   acs712_current.setDeviceClass("current");
   acs712_current.setIcon("mdi:current-dc");
