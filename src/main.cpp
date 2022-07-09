@@ -107,14 +107,14 @@ HASensor ina3221_channel_3_voltage("ina3221_channel_3_voltage");
 
 #if USE_ACS712
 // Configure ACS712 Sensor
-const unsigned long ACS712_PUBLISH_INTERVAL = 5000UL;
+const unsigned long ACS712_PUBLISH_INTERVAL = 300000UL;
 unsigned long acs712PreviousMillis = 0UL;
 
 // Arduino UNO has 5.0 volt with a max ADC value of 1023 steps
 // ACS712 5A  uses 185 mV per A
 // ACS712 20A uses 100 mV per A
 // ACS712 30A uses  66 mV per A
-ACS712 ACS(A1, 5.0, 1023, 66);
+ACS712 ACS(A1, 3.3, 1023, 66);
 
 HASensor acs712_current("acs712_current");
 #endif
