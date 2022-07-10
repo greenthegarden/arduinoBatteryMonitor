@@ -266,8 +266,8 @@ void setup()
 #endif
 
 #if USE_INA3221
-      // Configure ina3221_channel_1 specifics
-      ina3221_channel_1_current.setName("Channel 1 Current");
+  // Configure ina3221_channel_1 specifics
+  ina3221_channel_1_current.setName("Channel 1 Current");
   ina3221_channel_1_current.setUnitOfMeasurement("A");
   ina3221_channel_1_current.setDeviceClass("current");
   ina3221_channel_1_current.setIcon("mdi:current-dc");
@@ -359,7 +359,7 @@ void loop()
   if (now - acs712PreviousMillis >= ACS712_PUBLISH_INTERVAL)
   {
     acs712PreviousMillis = now;
-    acs712_current.setValue((double)ACS.mA_DC());
+    acs712_current.setValue((double)ACS.mA_DC()/1000.0);
   }
 #endif
 }
