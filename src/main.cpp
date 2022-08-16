@@ -1,3 +1,4 @@
+#include "ArduinoMKRZero.h"
 #include <ArduinoJson.h>
 #include <SPI.h>
 #include <SD.h>
@@ -13,25 +14,37 @@
 #if USE_METRIFUL
 #include <Metriful_sensor.h>
 #endif
+#if USE_VOLTAGE_SENSOR_BATTERY || USE_VOLTAGE_SENSOR_SOLAR
+#include "VoltageDivider.h"
+#endif
 
 #define SERIAL_SPEED 115200 // serial baud rate
 #define PRINT_DEC_POINTS 3  // decimal points to print
 
-#if SD_IN_MKRZERO
-        const unsigned int chipSelect = SDCARD_SS_PIN;
-#else
-        const unsigned int chipSelect = 4;
-#endif
-
-
-#define BROKER_ADDR IPAddress(192, 168, 1, 186)
-// IPAddress brokerAddr;
+/*
+ *************** Configure Network ***************
+ */
 
 byte mac[] = {0x00, 0x10, 0xFA, 0x6E, 0x38, 0x4C};
 EthernetClient client;
 
+/*
+ *************** Configure MQTT ***************
+ */
+
+#define BROKER_ADDR IPAddress(192, 168, 1, 186)
+// IPAddress brokerAddr;
+
+/*
+ *************** Configure Home Assistant ***************
+ */
+
 HADevice haDevice(mac, sizeof(mac));
 HAMqtt mqtt(client, haDevice);
+
+/*
+ *************** Configure Relays ***************
+ */
 
 // Define relays as switches
 // Set initial state of off (false)
@@ -63,6 +76,10 @@ void relay2onSwitchStateChanged(bool state, HASwitch *s)
   digitalWrite(RELAY_2_PIN, (state ? HIGH : LOW));
 }
 
+/*
+ *************** Configure METRIFUL sensor ***************
+ */
+
 #if USE_METRIFUL
 // Configure INA3221 Sensor
 const unsigned long METRIFUL_PUBLISH_INTERVAL = 5000UL;
@@ -89,6 +106,10 @@ HASensor metriful_AQ_assessment("metriful_AQ_assessment");
 HASensor metriful_particulates("metriful_particulates");
 #endif
 
+/*
+ *************** Configure INA3221 Power sensor ***************
+ */
+
 #if USE_INA3221
 // Configure INA3221 Sensor
 const unsigned long INA3221_PUBLISH_INTERVAL = 5000UL;
@@ -105,19 +126,54 @@ HASensor ina3221_channel_3_current("ina3221_channel_3_current");
 HASensor ina3221_channel_3_voltage("ina3221_channel_3_voltage");
 #endif
 
+/*
+ *************** Configure ACS721 Current sensor ***************
+ */
+
 #if USE_ACS712
 // Configure ACS712 Sensor
 const unsigned long ACS712_PUBLISH_INTERVAL = 300000UL;
 unsigned long acs712PreviousMillis = 0UL;
 
+const uint8_t acs_pin = A1;
 // Arduino UNO has 5.0 volt with a max ADC value of 1023 steps
 // ACS712 5A  uses 185 mV per A
 // ACS712 20A uses 100 mV per A
 // ACS712 30A uses  66 mV per A
-ACS712 ACS(A1, 3.3, 1023, 66);
+ACS712 ACS(acs_pin, MKRZERO_REF_VOLTAGE, (MKRZERO_ADC_RANGE - 1), 66);
 
 HASensor acs712_current("acs712_current");
 #endif
+
+/*
+ *************** Configure Solar Voltage Divider sensor ***************
+ */
+
+#if USE_VOLTAGE_SENSOR_SOLAR
+const unsigned long VOLTAGE_SENSOR_SOLAR_PUBLISH_INTERVAL = 300000UL;
+unsigned long voltageDividerSolarPreviousMillis = 0UL;
+
+const uint8_t voltageDivider_solar_pin = A0; // analog pin
+VoltageDivider voltageDivider_solar(voltageDivider_solar_pin, 30000.0, 7500.0, MKRZERO_REF_VOLTAGE, MKRZERO_ADC_RANGE);
+HASensor solar_500w_voltage("solar_500w_voltage");
+#endif
+
+/*
+ *************** Configure Battery Voltage Divider sensor ***************
+ */
+
+#if USE_VOLTAGE_SENSOR_BATTERY
+const unsigned long VOLTAGE_SENSOR_BATTERY_PUBLISH_INTERVAL = 300000UL;
+unsigned long voltageDividerBatteryPreviousMillis = 0UL;
+
+const uint8_t voltageDivider_battery_pin = A1; // analog pin
+VoltageDivider voltageDivider_battery(voltageDivider_battery_pin, 30000.0, 7500.0, MKRZERO_REF_VOLTAGE, MKRZERO_ADC_RANGE);
+HASensor battery_ThumperLithium60Ah_voltage("battery_ThumperLithium60Ah_voltage");
+#endif
+
+/*
+  *************** Configuration ***************
+  */
 
 StaticJsonDocument<256> doc;
 
@@ -189,6 +245,8 @@ void setup()
 
   read_config();
 
+  analogReadResolution(MKRZERO_ADC_RESOLUTION);
+
   // set device's details (optional)
   JsonObject device = doc["device"];
 
@@ -208,7 +266,7 @@ void setup()
   // the Home Assistant Panel.
   haDevice.enableLastWill();
 
-  // Configuratin for sensor INA3221
+  // Configuration for sensor INA3221
   // sensor.setName("12 volt system"); // optional
 
   JsonArray relays = doc["relays"].as<JsonArray>();
@@ -304,6 +362,20 @@ void setup()
   acs712_current.setIcon("mdi:current-dc");
 #endif
 
+#if USE_VOLTAGE_SENSOR_SOLAR
+  solar_500w_voltage.setName("Solar Voltage");
+  solar_500w_voltage.setUnitOfMeasurement("V");
+  solar_500w_voltage.setDeviceClass("voltage");
+  solar_500w_voltage.setIcon("mdi:solar-power-variant");
+#endif
+
+#if USE_VOLTAGE_SENSOR_BATTERY
+  battery_ThumperLithium60Ah_voltage.setName("Battery Voltage");
+  battery_ThumperLithium60Ah_voltage.setUnitOfMeasurement("V");
+  battery_ThumperLithium60Ah_voltage.setDeviceClass("voltage");
+  battery_ThumperLithium60Ah_voltage.setIcon("mdi:home-battery-outline");
+#endif
+
   // you don't need to verify return status
   Ethernet.begin(mac);
 
@@ -359,7 +431,25 @@ void loop()
   if (now - acs712PreviousMillis >= ACS712_PUBLISH_INTERVAL)
   {
     acs712PreviousMillis = now;
-    acs712_current.setValue((double)ACS.mA_DC()/1000.0);
+    acs712_current.setValue(-1*(double)ACS.mA_DC()/1000.0);
+  }
+#endif
+
+#if USE_VOLTAGE_SENSOR_BATTERY
+  // publish acs712 values
+  if (now - voltageDividerBatteryPreviousMillis >= VOLTAGE_SENSOR_BATTERY_PUBLISH_INTERVAL)
+  {
+    voltageDividerBatteryPreviousMillis = now;
+    battery_ThumperLithium60Ah_voltage.setValue(voltageDivider_battery.voltageMeasurement());
+  }
+#endif
+
+#if USE_VOLTAGE_SENSOR_SOLAR
+  // publish acs712 values
+  if (now - voltageDividerSolarPreviousMillis >= VOLTAGE_SENSOR_SOLAR_PUBLISH_INTERVAL)
+  {
+    voltageDividerSolarPreviousMillis = now;
+    solar_500w_voltage.setValue(voltageDivider_solar.voltageMeasurement());
   }
 #endif
 }
