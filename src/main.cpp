@@ -1,4 +1,8 @@
-#include "ArduinoMKRZero.h"
+// #if BOARD_MKRZERO
+// #include "ArduinoMKRZero.h"
+// #elif BOARD_UNO
+// #include "ArduinoUno.h"
+// #endif
 #include <ArduinoJson.h>
 #include <SPI.h>
 #include <SD.h>
@@ -18,8 +22,15 @@
 #include "VoltageDivider.h"
 #endif
 
+// #include <bREST.h>
+
 #define SERIAL_SPEED 115200 // serial baud rate
 #define PRINT_DEC_POINTS 3  // decimal points to print
+
+// EthernetServer server = EthernetServer(80);
+
+// Create bREST instance
+// bREST rest = bREST();
 
 /*
  *************** Configure Network ***************
@@ -135,12 +146,12 @@ HASensor ina3221_channel_3_voltage("ina3221_channel_3_voltage");
 const unsigned long ACS712_PUBLISH_INTERVAL = 300000UL;
 unsigned long acs712PreviousMillis = 0UL;
 
-const uint8_t acs_pin = A1;
+const uint8_t acs_pin = PIN_A3;
 // Arduino UNO has 5.0 volt with a max ADC value of 1023 steps
 // ACS712 5A  uses 185 mV per A
 // ACS712 20A uses 100 mV per A
 // ACS712 30A uses  66 mV per A
-ACS712 ACS(acs_pin, MKRZERO_REF_VOLTAGE, (MKRZERO_ADC_RANGE - 1), 66);
+ACS712 ACS(acs_pin, REF_VOLTAGE, (ADC_RANGE - 1), 66);
 
 HASensor acs712_current("acs712_current");
 #endif
@@ -153,8 +164,8 @@ HASensor acs712_current("acs712_current");
 const unsigned long VOLTAGE_SENSOR_SOLAR_PUBLISH_INTERVAL = 300000UL;
 unsigned long voltageDividerSolarPreviousMillis = 0UL;
 
-const uint8_t voltageDivider_solar_pin = A0; // analog pin
-VoltageDivider voltageDivider_solar(voltageDivider_solar_pin, 30000.0, 7500.0, MKRZERO_REF_VOLTAGE, MKRZERO_ADC_RANGE);
+const uint8_t voltageDivider_solar_pin = A1; // analog pin
+VoltageDivider voltageDivider_solar(voltageDivider_solar_pin, 30000.0, 7500.0, REF_VOLTAGE, ADC_RANGE);
 HASensor solar_500w_voltage("solar_500w_voltage");
 #endif
 
@@ -166,11 +177,12 @@ HASensor solar_500w_voltage("solar_500w_voltage");
 const unsigned long VOLTAGE_SENSOR_BATTERY_PUBLISH_INTERVAL = 300000UL;
 unsigned long voltageDividerBatteryPreviousMillis = 0UL;
 
-const uint8_t voltageDivider_battery_pin = A1; // analog pin
-VoltageDivider voltageDivider_battery(voltageDivider_battery_pin, 30000.0, 7500.0, MKRZERO_REF_VOLTAGE, MKRZERO_ADC_RANGE);
+const uint8_t voltageDivider_battery_pin = A2; // analog pin
+VoltageDivider voltageDivider_battery(voltageDivider_battery_pin, 30000.0, 7500.0, REF_VOLTAGE, ADC_RANGE);
 HASensor battery_ThumperLithium60Ah_voltage("battery_ThumperLithium60Ah_voltage");
 #endif
 
+#if BOARD_MKRZERO
 /*
   *************** Configuration ***************
   */
@@ -198,6 +210,7 @@ void read_config()
     Serial.println("Failed to open file");
   }
 }
+#endif
 
 void setup()
 {
@@ -232,10 +245,11 @@ void setup()
   ACS.autoMidPoint();
 #endif
 
+#if BOARD_MKRZERO
   Serial.println("\nInitializing SD card...");
 
   // see if the card is present and can be initialized:
-  if (!SD.begin(chipSelect))
+  if (!SD.begin(SD_CHIP_SELECT))
   {
     Serial.println("Card initialization failed, or not present");
     // don't do anything more:
@@ -245,7 +259,7 @@ void setup()
 
   read_config();
 
-  analogReadResolution(MKRZERO_ADC_RESOLUTION);
+  analogReadResolution(ADC_RESOLUTION);
 
   // set device's details (optional)
   JsonObject device = doc["device"];
@@ -254,6 +268,12 @@ void setup()
   haDevice.setModel(device["model"]);
   haDevice.setManufacturer(device["manufacturer"]);
   haDevice.setSoftwareVersion(device["version"]);
+#else
+  haDevice.setName("solar-power-meter");
+  haDevice.setModel("Uno");
+  haDevice.setManufacturer("Arduino");
+  haDevice.setSoftwareVersion("1.0.0");
+#endif
 
   // This method enables availability for all device types registered on the device.
   // For example, if you have 5 sensors on the same device, you can enable
@@ -266,9 +286,7 @@ void setup()
   // the Home Assistant Panel.
   haDevice.enableLastWill();
 
-  // Configuration for sensor INA3221
-  // sensor.setName("12 volt system"); // optional
-
+#if BOARD_MKRZERO
   JsonArray relays = doc["relays"].as<JsonArray>();
 
   // Configure relay_1 specifics
@@ -286,6 +304,7 @@ void setup()
   // handle switch state
   relay_2.onBeforeStateChanged(onBeforeSwitchStateChanged);
   relay_2.onStateChanged(relay2onSwitchStateChanged);
+#endif
 
 #if USE_METRIFUL
   metriful_temperature.setName("Temperature");
@@ -452,4 +471,17 @@ void loop()
     solar_500w_voltage.setValue(voltageDivider_solar.voltageMeasurement());
   }
 #endif
+
+  // // Handle REST calls
+  // WiFiClient client = server.available();
+  // if (!client)
+  // {
+  //   return;
+  // }
+  // while (!client.available())
+  // {
+  //   delay(1);
+  // }
+  // rest.handle(client);
+
 }
