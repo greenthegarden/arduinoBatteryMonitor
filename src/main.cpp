@@ -3,11 +3,13 @@
 // #elif BOARD_UNO
 // #include "ArduinoUno.h"
 // #endif
-#include <ArduinoJson.h>
-#include <SPI.h>
-#include <SD.h>
+// #include <SPI.h>
 #include <Ethernet.h>
 #include <ArduinoHA.h>
+#if BOARD_MKRZERO
+#include <SD.h>
+#include <ArduinoJson.h>
+#endif
 #if USE_INA3221
 #include <Wire.h>
 #include <Beastdevices_INA3221.h>
@@ -24,9 +26,6 @@
 
 // #include <bREST.h>
 
-#define SERIAL_SPEED 115200 // serial baud rate
-#define PRINT_DEC_POINTS 3  // decimal points to print
-
 // EthernetServer server = EthernetServer(80);
 
 // Create bREST instance
@@ -36,7 +35,7 @@
  *************** Configure Network ***************
  */
 
-byte mac[] = {0x00, 0x10, 0xFA, 0x6E, 0x38, 0x4C};
+byte mac[] = {0x00, 0x10, 0xFA, 0x6E, 0x38, 0x4E};
 EthernetClient client;
 
 /*
@@ -44,7 +43,6 @@ EthernetClient client;
  */
 
 #define BROKER_ADDR IPAddress(192, 168, 1, 186)
-// IPAddress brokerAddr;
 
 /*
  *************** Configure Home Assistant ***************
@@ -53,6 +51,7 @@ EthernetClient client;
 HADevice haDevice(mac, sizeof(mac));
 HAMqtt mqtt(client, haDevice);
 
+#if BOARD_MKRZERO
 /*
  *************** Configure Relays ***************
  */
@@ -86,6 +85,7 @@ void relay2onSwitchStateChanged(bool state, HASwitch *s)
 {
   digitalWrite(RELAY_2_PIN, (state ? HIGH : LOW));
 }
+#endif
 
 /*
  *************** Configure METRIFUL sensor ***************
@@ -214,12 +214,14 @@ void read_config()
 
 void setup()
 {
-  Serial.begin(115200); // open the serial port at 115200 bps:
+  Serial.begin(SERIAL_SPEED); // open the serial port at 115200 bps:
 
+#if BOARD_MKRZERO
   pinMode(RELAY_1_PIN, OUTPUT);
   // relay_1_lastInputState = digitalRead(RELAY_1_PIN);
   pinMode(RELAY_2_PIN, OUTPUT);
   // relay_2_lastInputState = digitalRead(RELAY_2_PIN);
+#endif
 
 #if USE_METRIFUL
   // Initialize the host's pins, set up the serial port and reset:
@@ -397,12 +399,11 @@ void setup()
 
   // you don't need to verify return status
   Ethernet.begin(mac);
-
+  delay(1500);
+  
   // print your local IP address:
   Serial.println(Ethernet.localIP());
 
-  // String ipAddStr = String(doc["mqtt"]["broker"]);
-  // mqtt.begin(brokerAddr.fromString(String(doc["mqtt"]["broker"])));
   mqtt.begin(BROKER_ADDR);
 }
 
