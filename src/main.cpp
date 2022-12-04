@@ -17,6 +17,9 @@
 #if USE_ACS712
 #include <ACS712.h>
 #endif
+#if USE_WCS1700
+#include <WinsonLib.h>
+#endif
 #if USE_METRIFUL
 #include <Metriful_sensor.h>
 #endif
@@ -157,6 +160,21 @@ HASensor acs712_current("acs712_current");
 #endif
 
 /*
+ *************** Configure WCS1700 Current sensor ***************
+ */
+
+#if USE_WCS1700
+// Configure ACS712 Sensor
+const unsigned long WCS1700_PUBLISH_INTERVAL = 300000UL;
+unsigned long wcs1700PreviousMillis = 0UL;
+
+const uint8_t wcs1700_pin = PIN_A2;
+
+// Setting Analog Pin & Sensitivity(mV/A)
+WCS WCS1700 = WCS(wcs1700_pin, _WCS1700);
+#endif
+
+/*
  *************** Configure Solar Voltage Divider sensor ***************
  */
 
@@ -245,6 +263,10 @@ void setup()
 
 #if USE_ACS712
   ACS.autoMidPoint();
+#endif
+
+#if USE_WCS1700
+  WCS1700.Reset();
 #endif
 
 #if BOARD_MKRZERO
@@ -453,6 +475,16 @@ void loop()
     acs712PreviousMillis = now;
     acs712_current.setValue(-1*(double)ACS.mA_DC()/1000.0);
   }
+#endif
+
+#if USE_WCS1700
+  // publish acs712 values
+  if (now - wcs1700PreviousMillis >= WCS1700_PUBLISH_INTERVAL)
+  {
+    wcs1700PreviousMillis = now;
+    float current = WCS1700.A_DC();
+    // wcs1700_current.setValue(current);
+  }  
 #endif
 
 #if USE_VOLTAGE_SENSOR_BATTERY

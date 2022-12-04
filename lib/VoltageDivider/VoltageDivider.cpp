@@ -1,5 +1,11 @@
 #include "VoltageDivider.h"
 
+/// @brief 
+/// @param analogPin
+/// @param r1 
+/// @param r2 
+/// @param refV 
+/// @param maxADC 
 VoltageDivider::VoltageDivider(uint8_t analogPin, float r1, float r2, float refV, uint16_t maxADC)
 {
   _pin = analogPin;

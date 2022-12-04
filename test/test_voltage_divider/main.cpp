@@ -23,7 +23,6 @@ void setup()
 {
   UNITY_BEGIN(); // IMPORTANT LINE!
 
-
   RUN_TEST(test_voltageDivider3v10bit_adc_voltage);
 
   UNITY_END(); // stop unit testing
